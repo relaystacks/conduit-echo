@@ -1,0 +1,23 @@
+{
+  "name": "@relaystack/conduit-echo",
+  "version": "1.0.0",
+  "description": "Passenger-compatible Node.js server for the Conduit ecosystem. Receives Laravel broadcasts over a Unix socket and delivers them to browsers via Socket.IO with Laravel Echo compatibility.",
+  "main": "index.js",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.5",
+    "express": "^4.19.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/relaystack/conduit-echo.git"
+  },
+  "keywords": [
+    "laravel", "laravel-echo", "broadcasting",
+    "socket.io", "unix-socket", "cpanel",
+    "passenger", "conduit", "relaystack"
+  ]
+}
