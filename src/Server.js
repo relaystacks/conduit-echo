@@ -123,13 +123,14 @@ class Server {
         next();
     }
 
-    /** Register subscribe, unsubscribe, disconnect, and error handlers. */
+    /** Register subscribe, unsubscribe, disconnect, client event, and error handlers. */
     _onConnection(socket) {
         console.log(`[conduit-echo] Connected  : ${socket.id}`);
-        socket.on('subscribe',   (payload) => this._onSubscribe(socket, payload));
-        socket.on('unsubscribe', (payload) => this._onUnsubscribe(socket, payload));
-        socket.on('disconnect',  (reason)  => this._onDisconnect(socket, reason));
-        socket.on('error',       (err)     => console.error(`[conduit-echo] Socket error (${socket.id}):`, err.message));
+        socket.on('subscribe',    (payload) => this._onSubscribe(socket, payload));
+        socket.on('unsubscribe',  (payload) => this._onUnsubscribe(socket, payload));
+        socket.on('client event', (payload) => this._onClientEvent(socket, payload));
+        socket.on('disconnect',   (reason)  => this._onDisconnect(socket, reason));
+        socket.on('error',        (err)     => console.error(`[conduit-echo] Socket error (${socket.id}):`, err.message));
     }
 
     /** Route subscription to public, private, or presence handler by channel prefix. */
@@ -178,6 +179,24 @@ class Server {
                 this._io.to(channel).emit('presence:leaving', channel, member);
             }
         }
+    }
+
+    /** Relay a client event (whisper) to other members of the channel. */
+    _onClientEvent(socket, payload) {
+        const { channel, event, data } = payload ?? {};
+        if (!channel || !event || typeof channel !== 'string' || typeof event !== 'string') return;
+        if (!socket.allowedChannels.has(channel)) return;
+        if (!PRESENCE_CHANNEL_RE.test(channel) && !PRIVATE_CHANNEL_RE.test(channel)) return;
+
+        let outData = data;
+        if (PRESENCE_CHANNEL_RE.test(channel)) {
+            const member = this._presenceManager.getMemberBySocket(channel, socket.id);
+            if (member) {
+                outData = { ...(data || {}), _sender: member };
+            }
+        }
+
+        socket.to(channel).emit(event, channel, outData);
     }
 
     /** Join a public channel — no authorization required. */

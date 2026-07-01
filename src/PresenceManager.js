@@ -129,6 +129,16 @@ class PresenceManager {
         }
         return false;
     }
+
+    /**
+     * Get a specific socket's channel data.
+     * @param {string} channel
+     * @param {string} socketId
+     * @returns {Object|null}
+     */
+    getMemberBySocket(channel, socketId) {
+        return this._channels.get(channel)?.get(socketId) ?? null;
+    }
 }
 
 module.exports = PresenceManager;
