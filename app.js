@@ -1,5 +1,22 @@
 'use strict';
 
+/**
+ * Passenger-compatible bootstrap for conduit-echo.
+ *
+ * Creates an Express + HTTP server and starts the Conduit relay. Never calls
+ * listen() — Passenger manages the port. Exports httpServer as module.exports
+ * per Passenger convention.
+ *
+ * Environment variables:
+ *   CONDUIT_SOCKET_PATH   — Unix socket path shared with PHP (required in production)
+ *   CONDUIT_AUTH_ENDPOINT  — Full URL to Laravel's /broadcasting/auth
+ *   CONDUIT_IO_PATH        — Socket.IO path (must match cPanel subdirectory)
+ *   CONDUIT_CORS_ORIGIN    — Allowed CORS origin(s)
+ *   CONDUIT_SECRET         — Shared HMAC-SHA256 secret (null = no verification)
+ *
+ * @module @relaystack/conduit-echo/app
+ */
+
 const http    = require('http');
 const express = require('express');
 const { Server } = require('./index');

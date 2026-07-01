@@ -4,7 +4,22 @@ const net = require('net');
 const fs  = require('fs');
 const { EventEmitter } = require('events');
 
+/**
+ * Listens on a Unix domain socket for newline-delimited JSON messages from PHP.
+ *
+ * Buffers incoming data per connection, enforces maxFrameBytes, and emits
+ * complete messages as 'message' events.
+ *
+ * @fires IpcReceiver#message
+ * @fires IpcReceiver#error
+ */
 class IpcReceiver extends EventEmitter {
+    /**
+     * @param {Object} options
+     * @param {string} options.socketPath       Unix socket path to listen on
+     * @param {number} [options.maxFrameBytes=65536]  Max frame size before dropping the connection
+     * @throws {Error} If socketPath is missing
+     */
     constructor({ socketPath, maxFrameBytes = 65_536 }) {
         super();
         if (!socketPath) throw new Error('[IpcReceiver] socketPath is required.');
@@ -13,6 +28,11 @@ class IpcReceiver extends EventEmitter {
         this._server        = null;
     }
 
+    /**
+     * Remove any stale socket file, create the server, and start listening.
+     * Sets chmod 0o600 (owner-only) on the socket file for security.
+     * @returns {Promise<void>}
+     */
     start() {
         return new Promise((resolve, reject) => {
             this._removeStale();
@@ -36,6 +56,10 @@ class IpcReceiver extends EventEmitter {
         });
     }
 
+    /**
+     * Close the server and remove the socket file.
+     * @returns {Promise<void>}
+     */
     stop() {
         return new Promise((resolve) => {
             if (!this._server) { resolve(); return; }
@@ -43,6 +67,7 @@ class IpcReceiver extends EventEmitter {
         });
     }
 
+    /** Buffer data chunks; on connection end, emit as a 'message' event. */
     _handleConnection(conn) {
         const chunks = [];
         let totalBytes = 0;
@@ -67,6 +92,7 @@ class IpcReceiver extends EventEmitter {
         });
     }
 
+    /** Delete the socket file if it exists (handles unclean shutdown). */
     _removeStale() {
         try {
             if (fs.existsSync(this._socketPath)) fs.unlinkSync(this._socketPath);

@@ -3,7 +3,22 @@
 const http        = require('http');
 const querystring = require('querystring');
 
+/**
+ * HTTP client that authorizes channel subscriptions by POSTing to Laravel's
+ * /broadcasting/auth endpoint.
+ *
+ * Uses a keep-alive http.Agent for connection pooling. Forwards the browser's
+ * cookies so Laravel can identify the session.
+ */
 class AuthService {
+    /**
+     * @param {Object} options
+     * @param {string} options.authEndpoint      Full URL to Laravel /broadcasting/auth
+     * @param {number} [options.maxSockets=10]   Max concurrent connections to Laravel
+     * @param {number} [options.keepAliveMsecs=5000]
+     * @param {number} [options.timeoutMs=5000]  Request timeout in milliseconds
+     * @throws {Error} If authEndpoint is missing
+     */
     constructor({ authEndpoint, maxSockets = 10, keepAliveMsecs = 5_000, timeoutMs = 5_000 }) {
         if (!authEndpoint) throw new Error('[AuthService] authEndpoint is required.');
 
@@ -13,6 +28,15 @@ class AuthService {
         this._agent = new http.Agent({ keepAlive: true, maxSockets, keepAliveMsecs });
     }
 
+    /**
+     * POST socket_id and channel_name to the auth endpoint.
+     *
+     * @param {string} socketId     Socket.IO socket ID
+     * @param {string} channelName  Channel being subscribed to
+     * @param {string} [cookies=''] Raw Cookie header from the browser handshake
+     * @returns {Promise<Object>}   Parsed JSON auth response from Laravel
+     * @throws {Error} With .statusCode on non-200 responses or timeouts
+     */
     authorize(socketId, channelName, cookies = '') {
         return new Promise((resolve, reject) => {
             const body = querystring.stringify({
@@ -67,6 +91,7 @@ class AuthService {
         });
     }
 
+    /** Destroy the HTTP keep-alive agent, closing all pooled connections. */
     destroy() { this._agent.destroy(); }
 }
 

@@ -1,11 +1,29 @@
 'use strict';
 
+/**
+ * In-memory tracker for presence channel membership.
+ *
+ * Deduplicates by user_id across multiple socket connections (tabs), so a user
+ * joining from two tabs only triggers one presence:joining event. When the
+ * user's last socket leaves, triggers presence:leaving.
+ *
+ * Internal data structures:
+ *   _channels:       Map<channelName, Map<socketId, channelData>>
+ *   _socketChannels: Map<socketId, Set<channelName>>  (reverse index)
+ */
 class PresenceManager {
     constructor() {
         this._channels = new Map();
         this._socketChannels = new Map();
     }
 
+    /**
+     * Register a socket's presence in a channel.
+     * @param {string} channel
+     * @param {string} socketId
+     * @param {Object} channelData  Must contain user_id and user_info
+     * @returns {{isNew: boolean, members: Object[]}}  isNew = first socket for this user_id
+     */
     join(channel, socketId, channelData) {
         if (!this._channels.has(channel)) {
             this._channels.set(channel, new Map());
@@ -24,6 +42,12 @@ class PresenceManager {
         return { isNew, members: this.members(channel) };
     }
 
+    /**
+     * Remove a single socket from a channel.
+     * @param {string} channel
+     * @param {string} socketId
+     * @returns {{wasLast: boolean, member: Object|null}}  wasLast = no more sockets for this user_id
+     */
     leave(channel, socketId) {
         const channelMembers = this._channels.get(channel);
         if (!channelMembers || !channelMembers.has(socketId)) {
@@ -48,6 +72,11 @@ class PresenceManager {
         return { wasLast, member };
     }
 
+    /**
+     * Remove a socket from all presence channels (used on disconnect).
+     * @param {string} socketId
+     * @returns {Array<{channel: string, wasLast: boolean, member: Object}>}
+     */
     leaveAll(socketId) {
         const channels = this._socketChannels.get(socketId);
         if (!channels) return [];
@@ -73,6 +102,11 @@ class PresenceManager {
         return departures;
     }
 
+    /**
+     * Get current members of a channel, deduplicated by user_id.
+     * @param {string} channel
+     * @returns {Object[]}
+     */
     members(channel) {
         const channelMembers = this._channels.get(channel);
         if (!channelMembers) return [];
@@ -88,6 +122,7 @@ class PresenceManager {
         return result;
     }
 
+    /** @returns {boolean} True if any socket in the channel has this userId */
     _userExists(channelMembers, userId) {
         for (const data of channelMembers.values()) {
             if (data.user_id === userId) return true;

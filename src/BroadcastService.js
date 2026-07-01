@@ -1,6 +1,16 @@
 'use strict';
 
+/**
+ * Glue layer wiring IpcReceiver messages through MessageValidator to SocketIoAdapter.
+ *
+ * This is the pipeline from IPC to browser: receive -> validate -> emit.
+ */
 class BroadcastService {
+    /**
+     * @param {import('./IpcReceiver')}      receiver
+     * @param {import('./MessageValidator')} validator
+     * @param {import('./SocketIoAdapter')}  adapter
+     */
     constructor(receiver, validator, adapter) {
         if (!receiver)  throw new Error('[BroadcastService] receiver is required.');
         if (!validator) throw new Error('[BroadcastService] validator is required.');
@@ -11,12 +21,14 @@ class BroadcastService {
         this._adapter   = adapter;
     }
 
+    /** Subscribe to receiver events and begin processing messages. */
     start() {
         this._receiver.on('message', (raw) => this._handleRaw(raw));
         this._receiver.on('error',   (err) => console.error('[BroadcastService] IPC error:', err.message));
         console.log('[BroadcastService] Pipeline active.');
     }
 
+    /** Validate a raw message and forward to Socket.IO if valid. */
     _handleRaw(raw) {
         const message = this._validator.validate(raw);
         if (!message) return;

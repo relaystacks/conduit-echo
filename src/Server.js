@@ -9,10 +9,33 @@ const BroadcastService = require('./BroadcastService');
 const AuthService      = require('./AuthService');
 const PresenceManager  = require('./PresenceManager');
 
+/** @const {RegExp} Matches private channel names */
 const PRIVATE_CHANNEL_RE  = /^private-/;
+/** @const {RegExp} Matches presence channel names */
 const PRESENCE_CHANNEL_RE = /^presence-/;
 
+/**
+ * Orchestrator for the conduit-echo relay server.
+ *
+ * Sets up Socket.IO, IPC receiver, broadcast pipeline, and auth service.
+ * Handles subscribe/unsubscribe/disconnect lifecycle for public, private,
+ * and presence channels.
+ */
 class Server {
+    /**
+     * @param {import('http').Server} httpServer         Node HTTP server (Passenger provides this)
+     * @param {Object}                options
+     * @param {string}                options.socketPath       Unix socket path for IPC with PHP
+     * @param {string}                options.authEndpoint     Full URL to Laravel /broadcasting/auth
+     * @param {string}               [options.ioPath='/socket.io']       Socket.IO path
+     * @param {string}               [options.corsOrigin='*']           Allowed CORS origin(s)
+     * @param {string|null}          [options.secret=null]              HMAC shared secret
+     * @param {number}               [options.authMaxSockets=10]        Max concurrent auth connections
+     * @param {number}               [options.authKeepAliveMsecs=5000]  Keep-alive interval
+     * @param {number}               [options.authTimeoutMs=5000]       Auth request timeout
+     * @param {number}               [options.maxFrameBytes=65536]      Max IPC frame size
+     * @throws {Error} If httpServer, socketPath, or authEndpoint is missing
+     */
     constructor(httpServer, options = {}) {
         if (!httpServer)           throw new Error('[Server] httpServer is required.');
         if (!options.socketPath)   throw new Error('[Server] options.socketPath is required.');
@@ -37,6 +60,10 @@ class Server {
         this._presenceManager  = new PresenceManager();
     }
 
+    /**
+     * Initialize all services and start listening for IPC messages and Socket.IO connections.
+     * @returns {Promise<void>}
+     */
     async start() {
         const o = this._options;
 
@@ -75,8 +102,13 @@ class Server {
         console.log(`[conduit-echo]   Socket.IO   : ${o.ioPath}`);
     }
 
+    /** @returns {import('socket.io').Server|null} */
     getIo() { return this._io; }
 
+    /**
+     * Graceful shutdown — stop IPC, destroy auth agent, close Socket.IO.
+     * @returns {Promise<void>}
+     */
     async stop() {
         await this._ipcReceiver?.stop();
         this._authService?.destroy();
@@ -84,12 +116,14 @@ class Server {
         console.log('[conduit-echo] Shutdown complete.');
     }
 
+    /** Attach user token and allowedChannels set to each new socket. */
     _connectionMiddleware(socket, next) {
         socket.user            = socket.handshake.auth?.token ?? null;
         socket.allowedChannels = new Set();
         next();
     }
 
+    /** Register subscribe, unsubscribe, disconnect, and error handlers. */
     _onConnection(socket) {
         console.log(`[conduit-echo] Connected  : ${socket.id}`);
         socket.on('subscribe',   (payload) => this._onSubscribe(socket, payload));
@@ -98,6 +132,7 @@ class Server {
         socket.on('error',       (err)     => console.error(`[conduit-echo] Socket error (${socket.id}):`, err.message));
     }
 
+    /** Route subscription to public, private, or presence handler by channel prefix. */
     async _onSubscribe(socket, payload) {
         const channel = payload?.channel;
 
@@ -115,6 +150,7 @@ class Server {
         }
     }
 
+    /** Leave the room; for presence channels, broadcast departure if last socket. */
     _onUnsubscribe(socket, payload) {
         const channel = payload?.channel;
         if (!channel || typeof channel !== 'string') return;
@@ -132,6 +168,7 @@ class Server {
         console.log(`[conduit-echo] ${socket.id} ← unsubscribed "${channel}"`);
     }
 
+    /** Clean up all presence memberships on disconnect. */
     _onDisconnect(socket, reason) {
         console.log(`[conduit-echo] Disconnected: ${socket.id} — ${reason}`);
 
@@ -143,6 +180,7 @@ class Server {
         }
     }
 
+    /** Join a public channel — no authorization required. */
     _subscribePublic(socket, channel) {
         socket.join(channel);
         socket.allowedChannels.add(channel);
@@ -150,6 +188,7 @@ class Server {
         console.log(`[conduit-echo] ${socket.id} → public "${channel}"`);
     }
 
+    /** Authorize via Laravel and join a private channel. */
     async _subscribePrivate(socket, channel) {
         const cookies = socket.handshake.headers?.cookie ?? '';
         try {
@@ -165,6 +204,7 @@ class Server {
         }
     }
 
+    /** Authorize via Laravel, register in PresenceManager, and join a presence channel. */
     async _subscribePresence(socket, channel) {
         const cookies = socket.handshake.headers?.cookie ?? '';
         try {
