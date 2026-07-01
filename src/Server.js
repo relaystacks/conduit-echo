@@ -7,6 +7,7 @@ const MessageValidator = require('./MessageValidator');
 const SocketIoAdapter  = require('./SocketIoAdapter');
 const BroadcastService = require('./BroadcastService');
 const AuthService      = require('./AuthService');
+const PresenceManager  = require('./PresenceManager');
 
 const PRIVATE_CHANNEL_RE  = /^private-/;
 const PRESENCE_CHANNEL_RE = /^presence-/;
@@ -33,6 +34,7 @@ class Server {
         this._ipcReceiver      = null;
         this._broadcastService = null;
         this._authService      = null;
+        this._presenceManager  = new PresenceManager();
     }
 
     async start() {
@@ -90,9 +92,10 @@ class Server {
 
     _onConnection(socket) {
         console.log(`[conduit-echo] Connected  : ${socket.id}`);
-        socket.on('subscribe',  (payload) => this._onSubscribe(socket, payload));
-        socket.on('disconnect', (reason)  => console.log(`[conduit-echo] Disconnected: ${socket.id} — ${reason}`));
-        socket.on('error',      (err)     => console.error(`[conduit-echo] Socket error (${socket.id}):`, err.message));
+        socket.on('subscribe',   (payload) => this._onSubscribe(socket, payload));
+        socket.on('unsubscribe', (payload) => this._onUnsubscribe(socket, payload));
+        socket.on('disconnect',  (reason)  => this._onDisconnect(socket, reason));
+        socket.on('error',       (err)     => console.error(`[conduit-echo] Socket error (${socket.id}):`, err.message));
     }
 
     async _onSubscribe(socket, payload) {
@@ -103,10 +106,40 @@ class Server {
             return;
         }
 
-        if (PRIVATE_CHANNEL_RE.test(channel) || PRESENCE_CHANNEL_RE.test(channel)) {
+        if (PRESENCE_CHANNEL_RE.test(channel)) {
+            await this._subscribePresence(socket, channel);
+        } else if (PRIVATE_CHANNEL_RE.test(channel)) {
             await this._subscribePrivate(socket, channel);
         } else {
             this._subscribePublic(socket, channel);
+        }
+    }
+
+    _onUnsubscribe(socket, payload) {
+        const channel = payload?.channel;
+        if (!channel || typeof channel !== 'string') return;
+
+        socket.leave(channel);
+        socket.allowedChannels.delete(channel);
+
+        if (PRESENCE_CHANNEL_RE.test(channel)) {
+            const { wasLast, member } = this._presenceManager.leave(channel, socket.id);
+            if (wasLast && member) {
+                this._io.to(channel).emit('presence:leaving', channel, member);
+            }
+        }
+
+        console.log(`[conduit-echo] ${socket.id} ← unsubscribed "${channel}"`);
+    }
+
+    _onDisconnect(socket, reason) {
+        console.log(`[conduit-echo] Disconnected: ${socket.id} — ${reason}`);
+
+        const departures = this._presenceManager.leaveAll(socket.id);
+        for (const { channel, wasLast, member } of departures) {
+            if (wasLast) {
+                this._io.to(channel).emit('presence:leaving', channel, member);
+            }
         }
     }
 
@@ -128,6 +161,37 @@ class Server {
         } catch (err) {
             const statusCode = err.statusCode ?? 500;
             console.warn(`[conduit-echo] Auth failed (${socket.id}, "${channel}"): HTTP ${statusCode}`);
+            socket.emit('subscription_error', { channel, message: 'Unauthorised.', statusCode });
+        }
+    }
+
+    async _subscribePresence(socket, channel) {
+        const cookies = socket.handshake.headers?.cookie ?? '';
+        try {
+            const authResponse = await this._authService.authorize(socket.id, channel, cookies);
+
+            const channelData = authResponse?.channel_data;
+            if (!channelData || channelData.user_id === undefined) {
+                console.warn(`[conduit-echo] Presence auth missing channel_data for "${channel}"`);
+                socket.emit('subscription_error', { channel, message: 'Invalid presence auth response.' });
+                return;
+            }
+
+            socket.join(channel);
+            socket.allowedChannels.add(channel);
+
+            const { isNew, members } = this._presenceManager.join(channel, socket.id, channelData);
+
+            socket.emit('presence:subscribed', channel, members);
+
+            if (isNew) {
+                socket.to(channel).emit('presence:joining', channel, channelData);
+            }
+
+            console.log(`[conduit-echo] ${socket.id} → presence "${channel}" (user ${channelData.user_id})`);
+        } catch (err) {
+            const statusCode = err.statusCode ?? 500;
+            console.warn(`[conduit-echo] Presence auth failed (${socket.id}, "${channel}"): HTTP ${statusCode}`);
             socket.emit('subscription_error', { channel, message: 'Unauthorised.', statusCode });
         }
     }

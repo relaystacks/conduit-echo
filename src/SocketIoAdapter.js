@@ -7,7 +7,7 @@ class SocketIoAdapter {
     }
 
     send(channel, event, data) {
-        this._io.to(channel).emit(event, data);
+        this._io.to(channel).emit(event, channel, data);
     }
 
     getIo() { return this._io; }
