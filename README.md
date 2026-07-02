@@ -1,6 +1,6 @@
-# @relaystack/conduit-echo
+# @relaystacks/conduit-echo
 
-Passenger-compatible Node.js relay server for the RelayStack Conduit ecosystem. Receives Laravel broadcasts over a Unix domain socket and delivers them to browsers via Socket.IO with full Laravel Echo compatibility.
+Passenger-compatible Node.js relay server for the RelayStacks Conduit ecosystem. Receives Laravel broadcasts over a Unix domain socket and delivers them to browsers via Socket.IO with full Laravel Echo compatibility.
 
 ## How It Works
 
@@ -36,7 +36,7 @@ Browser ──► subscribe ──► AuthService ──► Laravel /broadcastin
 ## Installation
 
 ```bash
-npm install @relaystack/conduit-echo
+npm install @relaystacks/conduit-echo
 ```
 
 ## Passenger Setup (cPanel)
@@ -63,7 +63,7 @@ For environments outside Passenger (local dev, Docker, etc.):
 
 ```js
 const http = require('http');
-const { Server } = require('@relaystack/conduit-echo');
+const { Server } = require('@relaystacks/conduit-echo');
 
 const httpServer = http.createServer();
 
@@ -211,7 +211,7 @@ GET /health
 Returns:
 
 ```json
-{"status": "ok", "package": "@relaystack/conduit-echo"}
+{"status": "ok", "package": "@relaystacks/conduit-echo"}
 ```
 
 ## Graceful Shutdown

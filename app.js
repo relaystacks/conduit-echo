@@ -14,7 +14,7 @@
  *   CONDUIT_CORS_ORIGIN    — Allowed CORS origin(s)
  *   CONDUIT_SECRET         — Shared HMAC-SHA256 secret (null = no verification)
  *
- * @module @relaystack/conduit-echo/app
+ * @module @relaystacks/conduit-echo/app
  */
 
 const http    = require('http');
@@ -26,7 +26,7 @@ const httpServer = http.createServer(app);
 
 app.get('/health', (_req, res) => res.json({
     status:  'ok',
-    package: '@relaystack/conduit-echo',
+    package: '@relaystacks/conduit-echo',
 }));
 
 const conduit = new Server(httpServer, {
