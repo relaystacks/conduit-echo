@@ -1,6 +1,6 @@
 {
   "name": "@relaystacks/conduit-echo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Passenger-compatible Node.js server for the Conduit ecosystem. Receives Laravel broadcasts over a Unix socket and delivers them to browsers via Socket.IO with Laravel Echo compatibility.",
   "main": "index.js",
   "files": [

@@ -1,14 +1,16 @@
 'use strict';
 
 const http        = require('http');
+const https       = require('https');
 const querystring = require('querystring');
 
 /**
- * HTTP client that authorizes channel subscriptions by POSTing to Laravel's
- * /broadcasting/auth endpoint.
+ * HTTP/HTTPS client that authorizes channel subscriptions by POSTing to
+ * Laravel's /broadcasting/auth endpoint.
  *
- * Uses a keep-alive http.Agent for connection pooling. Forwards the browser's
- * cookies so Laravel can identify the session.
+ * Uses a keep-alive Agent for connection pooling. Forwards the browser's
+ * cookies so Laravel can identify the session. Automatically selects http
+ * or https based on the endpoint URL protocol.
  */
 class AuthService {
     /**
@@ -24,8 +26,10 @@ class AuthService {
 
         this._endpoint  = new URL(authEndpoint);
         this._timeoutMs = timeoutMs;
+        this._isHttps   = this._endpoint.protocol === 'https:';
 
-        this._agent = new http.Agent({ keepAlive: true, maxSockets, keepAliveMsecs });
+        const AgentClass = this._isHttps ? https.Agent : http.Agent;
+        this._agent = new AgentClass({ keepAlive: true, maxSockets, keepAliveMsecs });
     }
 
     /**
@@ -46,7 +50,7 @@ class AuthService {
 
             const options = {
                 hostname: this._endpoint.hostname,
-                port:     this._endpoint.port || 80,
+                port:     this._endpoint.port || (this._isHttps ? 443 : 80),
                 path:     this._endpoint.pathname,
                 method:   'POST',
                 agent:    this._agent,
@@ -59,7 +63,8 @@ class AuthService {
                 },
             };
 
-            const req = http.request(options, (res) => {
+            const lib = this._isHttps ? https : http;
+            const req = lib.request(options, (res) => {
                 const chunks = [];
                 res.on('data', (c) => chunks.push(c));
                 res.on('end', () => {
@@ -91,7 +96,7 @@ class AuthService {
         });
     }
 
-    /** Destroy the HTTP keep-alive agent, closing all pooled connections. */
+    /** Destroy the keep-alive agent, closing all pooled connections. */
     destroy() { this._agent.destroy(); }
 }
 
